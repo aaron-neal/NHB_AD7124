@@ -36,6 +36,11 @@
 #define AD7124_DEFAULT_TIMEOUT_MS 200 // milliseconds
 #define AD7124_MAX_CHANNELS 16 // not sure if this will be used yet
 
+enum AD7124Device {
+    AD7124_4_DEVICE,
+    AD7124_8_DEVICE
+};
+
 enum AD7124_OperatingModes
 {
     AD7124_OpMode_Continuous = 0,            // Continuous conversion mode (default). In continuous conversion mode, the ADC continuously performs conversions and places the result in the data register.
@@ -110,7 +115,7 @@ enum AD7124_GainSel
     AD7124_Gain_128    // Gain 128, Input Range When VREF = 2.5 V: ±19.53 mV
 };
 
-//NOTE: These are different for the AD7124-8
+//NOTE: These are different for the AD7124-8 (page 85)
 enum AD7124_VBiasPins
 {
     AD7124_VBias_AIN0 = 0x00,
@@ -122,6 +127,26 @@ enum AD7124_VBiasPins
     AD7124_VBias_AIN6 = 0x0E,
     AD7124_VBias_AIN7 = 0x0F,
 };
+enum AD7124_8_VBiasPins
+{
+    AD7124_8_VBias_AIN0 = 0x00,
+    AD7124_8_VBias_AIN1 = 0x01,
+    AD7124_8_VBias_AIN2 = 0x02,
+    AD7124_8_VBias_AIN3 = 0x03,
+    AD7124_8_VBias_AIN4 = 0x04,
+    AD7124_8_VBias_AIN5 = 0x05,
+    AD7124_8_VBias_AIN6 = 0x06,
+    AD7124_8_VBias_AIN7 = 0x07,
+    AD7124_8_VBias_AIN8 = 0x08,
+    AD7124_8_VBias_AIN9 = 0x09,
+    AD7124_8_VBias_AIN10 = 0x0A,
+    AD7124_8_VBias_AIN11 = 0x0B,
+    AD7124_8_VBias_AIN12 = 0x0C,
+    AD7124_8_VBias_AIN13 = 0x0D,
+    AD7124_8_VBias_AIN14 = 0x0E,
+    AD7124_8_VBias_AIN15 = 0x0F,
+};
+
 
 enum AD7124_RefSources
 {
@@ -188,6 +213,27 @@ enum AD7124_ExCurrentOutputChannel
     AD7124_ExCurrentOutputChannel_AIN5 = 0xB,
     AD7124_ExCurrentOutputChannel_AIN6 = 0xE,
     AD7124_ExCurrentOutputChannel_AIN7 = 0xF,
+};
+
+//excitation output channels (page 84 of datasheet)
+enum AD7124_8_ExCurrentOutputChannel
+{
+    AD7124_8_ExCurrentOutputChannel_AIN0 = 0x0,
+    AD7124_8_ExCurrentOutputChannel_AIN1 = 0x1,
+    AD7124_8_ExCurrentOutputChannel_AIN2 = 0x2,
+    AD7124_8_ExCurrentOutputChannel_AIN3 = 0x3,
+    AD7124_8_ExCurrentOutputChannel_AIN4 = 0x4,
+    AD7124_8_ExCurrentOutputChannel_AIN5 = 0x5,
+    AD7124_8_ExCurrentOutputChannel_AIN6 = 0x6,
+    AD7124_8_ExCurrentOutputChannel_AIN7 = 0x7,
+    AD7124_8_ExCurrentOutputChannel_AIN8 = 0x8,
+    AD7124_8_ExCurrentOutputChannel_AIN9 = 0x9,
+    AD7124_8_ExCurrentOutputChannel_AIN10 = 0xA,
+    AD7124_8_ExCurrentOutputChannel_AIN11 = 0xB,
+    AD7124_8_ExCurrentOutputChannel_AIN12 = 0xC,
+    AD7124_8_ExCurrentOutputChannel_AIN13 = 0xD,
+    AD7124_8_ExCurrentOutputChannel_AIN14 = 0xE,
+    AD7124_8_ExCurrentOutputChannel_AIN15 = 0xF,
 };
 
 // Device register info
@@ -399,9 +445,11 @@ public:
 
     //Enable bias voltage on given channel
     int setVBias(AD7124_VBiasPins vBiasPin, bool enabled);
+    int setVBias(AD7124_8_VBiasPins vBiasPin, bool enabled);
 
     //Set excitation current
     int setExCurrent(AD7124_ExCurrentOutputChannel ch, AD7124_ExCurrentSource source, AD7124_ExCurrent current);
+    int setExCurrent(AD7124_8_ExCurrentOutputChannel ch, AD7124_ExCurrentSource source, AD7124_ExCurrent current);
 
     void setTimeout(uint32_t ms) { timeout = ms; }
 
@@ -455,6 +503,9 @@ public:
 
     Ad7124Setup setup[8];
 
+    RTD rtd;
+
+
 private:
 
     int noCheckReadRegister(Ad7124_Register *reg);
@@ -473,11 +524,11 @@ private:
     void updateDevSpiSettings(void);
     void spiWriteAndRead(uint8_t *data, uint8_t numBytes);
 
-
+    int setVBias(uint8_t vBiasPin, bool enabled);
+    int setExCurrent(uint8_t ch, AD7124_ExCurrentSource source, AD7124_ExCurrent current);
 
     SPISettings spiSettings;
     Thermocouple thermocouple;
-    RTD rtd;
     bool crcEnabled = false;
     bool isReady = true; //Not really used now, may go away [8-26-21]
     uint8_t cs;

@@ -191,6 +191,14 @@ int Ad7124::setPWRSW(bool enabled)
 // is necessary to read truly bipolar output from thermocouples 
 int Ad7124::setVBias(AD7124_VBiasPins vBiasPin, bool enabled)
 {
+  return setVBias((uint8_t)vBiasPin, enabled);
+}
+int Ad7124::setVBias(AD7124_8_VBiasPins vBiasPin, bool enabled)
+{
+  return setVBias((uint8_t)vBiasPin, enabled);
+}
+int Ad7124::setVBias(uint8_t vBiasPin, bool enabled)
+{
 
   regs[Reg_IOCon2].value &= ~(1 << (uint8_t)vBiasPin);
 
@@ -381,7 +389,16 @@ double Ad7124::readFB(uint8_t ch, double vEx, double scaleFactor)
 }
 
 //sets the excitation current for a given channel
-int Ad7124::setExCurrent(AD7124_ExCurrentOutputChannel ch, AD7124_ExCurrentSource source, AD7124_ExCurrent current){
+int Ad7124::setExCurrent(AD7124_ExCurrentOutputChannel ch, AD7124_ExCurrentSource source, AD7124_ExCurrent current)
+{
+  return setExCurrent((uint8_t)ch, source, current);
+}
+
+int Ad7124::setExCurrent(AD7124_8_ExCurrentOutputChannel ch, AD7124_ExCurrentSource source, AD7124_ExCurrent current)
+{
+  return setExCurrent((uint8_t)ch, source, current);
+}
+int Ad7124::setExCurrent(uint8_t ch, AD7124_ExCurrentSource source, AD7124_ExCurrent current){
   if (source == AD7124_ExCurrentSource_0) {
     regs[Reg_IOCon1].value &= ~ (AD7124_IO_CTRL1_REG_IOUT0 (7) | AD7124_IO_CTRL1_REG_IOUT_CH0 (15));
     regs[Reg_IOCon1].value |= AD7124_IO_CTRL1_REG_IOUT0 (current) | AD7124_IO_CTRL1_REG_IOUT_CH0 (ch);
