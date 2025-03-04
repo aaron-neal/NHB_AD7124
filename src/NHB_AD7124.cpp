@@ -448,6 +448,52 @@ AD7124_OperatingModes Ad7124::mode(){
   return static_cast<AD7124_OperatingModes>((regs[Reg_Control].value >> 2) & 0xF);
 }
 
+int Ad7124::internalCalibration(uint8_t ch)
+{
+  int ret;
+  uint8_t cfg;
+
+  ret = setMode (AD7124_OpMode_Standby);
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (uint8_t c = 0; c < 16; c++) {
+    // disable all channels
+    ret = enableChannel(c, false);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  ret = channelConfig(ch);
+  if (ret < 0) {
+
+    return ret;
+  }
+  cfg = (uint8_t) ret;
+  ret = setConfigOffset(cfg, 0x800000);
+
+  ret = enableChannel(ch, true);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = setMode(AD7124_OpMode_InternalGainCalibration);
+  ret = waitForConvReady(timeout());
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = setMode(AD7124_OpMode_InternalOffsetCalibration);
+  ret = waitForConvReady(timeout());
+  if (ret < 0) {
+    return ret;
+  }
+
+  return enableChannel (ch, false);
+}
+
 // Configure channel
 int Ad7124::setChannel(uint8_t ch, uint8_t setup, AD7124_InputSel aiPos,
                        AD7124_InputSel aiNeg, bool enable)

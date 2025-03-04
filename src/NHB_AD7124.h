@@ -488,6 +488,10 @@ public:
     AD7124_OperatingModes mode();
 
 
+    //runs internal calibration
+    int internalCalibration(uint8_t ch);
+
+
         
     // Waits until a new conversion result is available.
     // This would be private, but I made it public in case someone wants
