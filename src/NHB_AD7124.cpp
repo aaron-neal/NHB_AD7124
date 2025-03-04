@@ -480,13 +480,13 @@ int Ad7124::internalCalibration(uint8_t ch)
   }
 
   ret = setMode(AD7124_OpMode_InternalGainCalibration);
-  ret = waitForConvReady(timeout());
+  ret = waitForConvReady(timeout);
   if (ret < 0) {
     return ret;
   }
 
   ret = setMode(AD7124_OpMode_InternalOffsetCalibration);
-  ret = waitForConvReady(timeout());
+  ret = waitForConvReady(timeout);
   if (ret < 0) {
     return ret;
   }
