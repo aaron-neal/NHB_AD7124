@@ -58,6 +58,15 @@ int Ad7124Setup::setConfig(AD7124_RefSources ref, AD7124_GainSel gain,
   return _driver->writeRegister((AD7124_regIDs)reg);
 }
 
+int Ad7124Setup::getConfig()
+{
+  Ad7124_Register * r;
+  uint8_t cfg;
+  r = &_driver->regs[setupNum + Reg_Config_0];
+  cfg = (r->value >> 12) & 0x07;
+  return cfg;
+}
+
 // Sets the filter type and output word rate for a setup
 int Ad7124Setup::setFilter(AD7124_Filters filter, uint16_t fs,
                            AD7124_PostFilters postfilter, bool rej60,
@@ -132,6 +141,178 @@ uint8_t Ad7124Setup::gain()
   return 1 << (uint8_t)setupValues.gain;
 }
 
+// ...existing code...
+
+int Ad7124Setup::internalCalibration()
+{
+    int ret;
+    uint8_t targetChannel = 0xFF;
+    
+    // Find any channel that uses this setup
+    for (uint8_t ch = 0; ch < 16; ch++) {
+        if (_driver->channelSetup(ch) == setupNum) {
+            targetChannel = ch;
+            break;
+        }
+    }
+    
+    if (targetChannel == 0xFF) {
+        Serial.printf("ERROR: No channel uses setup %d\n", setupNum);
+        return AD7124_INVALID_VAL;
+    }
+
+    Serial.printf("Starting calibration for Setup %d using Channel %d\n", setupNum, targetChannel);
+
+    // Read and display current calibration coefficients
+    uint8_t offsetReg = setupNum + Reg_Offset_0;
+    uint8_t gainReg = setupNum + Reg_Gain_0;
+    
+    ret = _driver->readRegister((AD7124_regIDs)offsetReg);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to read offset register: %d\n", ret);
+        return ret;
+    }
+    
+    ret = _driver->readRegister((AD7124_regIDs)gainReg);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to read gain register: %d\n", ret);
+        return ret;
+    }
+
+    uint32_t beforeOffset = _driver->regs[offsetReg].value;
+    uint32_t beforeGain = _driver->regs[gainReg].value;
+    
+    Serial.printf("BEFORE Calibration - Setup %d:\n", setupNum);
+    Serial.printf("  Offset: 0x%06X (%d)\n", beforeOffset, beforeOffset);
+    Serial.printf("  Gain:   0x%06X (%d)\n", beforeGain, beforeGain);
+
+    // Store current channel states
+    bool channelStates[16];
+    for (uint8_t c = 0; c < 16; c++) {
+        channelStates[c] = _driver->enabled(c);
+    }
+
+    // Disable all channels
+    for (uint8_t c = 0; c < 16; c++) {
+        ret = _driver->enableChannel(c, false);
+        if (ret < 0) {
+            Serial.printf("ERROR: Failed to disable channel %d: %d\n", c, ret);
+            return ret;
+        }
+    }
+
+    // Enable only the target channel for calibration
+    ret = _driver->enableChannel(targetChannel, true);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to enable calibration channel %d: %d\n", targetChannel, ret);
+        return ret;
+    }
+
+    // Reset calibration coefficients to factory defaults
+    Serial.println("Resetting calibration coefficients to defaults...");
+    ret = setOffsetCal(0x800000);  // Default offset (mid-scale for 24-bit)
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to reset offset coefficient: %d\n", ret);
+        return ret;
+    }
+    
+    ret = setGainCal(0x500000);    // Default gain coefficient
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to reset gain coefficient: %d\n", ret);
+        return ret;
+    }
+
+    // Step 1: Internal Offset (Zero-Scale) Calibration
+    Serial.println("Starting internal offset calibration...");
+    ret = _driver->setMode(AD7124_OpMode_InternalOffsetCalibration);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to start offset calibration: %d\n", ret);
+        return ret;
+    }
+    
+    // Wait for offset calibration to complete (RDY pin goes low)
+    ret = _driver->waitForConvReady(10000);  // 10 second timeout for calibration
+    if (ret < 0) {
+        Serial.printf("ERROR: Offset calibration timeout or failed: %d\n", ret);
+        return ret;
+    }
+    Serial.println("Offset calibration completed successfully");
+
+    // Step 2: Internal Gain (Full-Scale) Calibration
+    Serial.println("Starting internal gain calibration...");
+    ret = _driver->setMode(AD7124_OpMode_InternalGainCalibration);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to start gain calibration: %d\n", ret);
+        return ret;
+    }
+    
+    // Wait for gain calibration to complete (RDY pin goes low)
+    ret = _driver->waitForConvReady(10000);  // 10 second timeout for calibration
+    if (ret < 0) {
+        Serial.printf("ERROR: Gain calibration timeout or failed: %d\n", ret);
+        return ret;
+    }
+    Serial.println("Gain calibration completed successfully");
+
+    // Read back the new calibration coefficients
+    ret = _driver->readRegister((AD7124_regIDs)offsetReg);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to read updated offset register: %d\n", ret);
+        return ret;
+    }
+    
+    ret = _driver->readRegister((AD7124_regIDs)gainReg);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to read updated gain register: %d\n", ret);
+        return ret;
+    }
+
+    uint32_t afterOffset = _driver->regs[offsetReg].value;
+    uint32_t afterGain = _driver->regs[gainReg].value;
+
+    // Update stored values
+    setupValues.offsetCoeff = afterOffset;
+    setupValues.gainCoeff = afterGain;
+
+    // Display results
+    Serial.printf("AFTER Calibration - Setup %d:\n", setupNum);
+    Serial.printf("  Offset: 0x%06X (%d) [Change: %+d]\n", 
+                  afterOffset, afterOffset, (int32_t)afterOffset - (int32_t)beforeOffset);
+    Serial.printf("  Gain:   0x%06X (%d) [Change: %+d]\n", 
+                  afterGain, afterGain, (int32_t)afterGain - (int32_t)beforeGain);
+
+    // Verify calibration actually changed the coefficients
+    if (afterOffset == beforeOffset && afterGain == beforeGain) {
+        Serial.println("WARNING: Calibration coefficients did not change!");
+    } else {
+        Serial.println("Calibration coefficients updated successfully");
+    }
+
+    // Return to standby mode
+    ret = _driver->setMode(AD7124_OpMode_Standby);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to return to standby mode: %d\n", ret);
+        return ret;
+    }
+
+    // Restore original channel states
+    for (uint8_t c = 0; c < 16; c++) {
+        ret = _driver->enableChannel(c, channelStates[c]);
+        if (ret < 0) {
+            Serial.printf("ERROR: Failed to restore channel %d state: %d\n", c, ret);
+            return ret;
+        }
+    }
+
+    // Check for any errors in the error register
+    int errorStatus = _driver->readRegister(Reg_Error);
+    if (errorStatus > 0) {
+        Serial.printf("WARNING: Error register shows: 0x%06X\n", errorStatus);
+    }
+
+    Serial.printf("Setup %d calibration completed successfully!\n\n", setupNum);
+    return 0;
+}
 Ad7124::Ad7124(uint8_t csPin, uint32_t spiFrequency)
 {
   cs = csPin;
@@ -398,6 +579,7 @@ int Ad7124::setExCurrent(AD7124_8_ExCurrentOutputChannel ch, AD7124_ExCurrentSou
 {
   return setExCurrent((uint8_t)ch, source, current);
 }
+
 int Ad7124::setExCurrent(uint8_t ch, AD7124_ExCurrentSource source, AD7124_ExCurrent current){
   if (source == AD7124_ExCurrentSource_0) {
     regs[Reg_IOCon1].value &= ~ (AD7124_IO_CTRL1_REG_IOUT0 (7) | AD7124_IO_CTRL1_REG_IOUT_CH0 (15));
@@ -446,52 +628,6 @@ int Ad7124::setMode(AD7124_OperatingModes mode)
 // Returns current operating mode
 AD7124_OperatingModes Ad7124::mode(){  
   return static_cast<AD7124_OperatingModes>((regs[Reg_Control].value >> 2) & 0xF);
-}
-
-int Ad7124::internalCalibration(uint8_t ch)
-{
-  int ret;
-  uint8_t cfg;
-
-  ret = setMode (AD7124_OpMode_Standby);
-  if (ret < 0) {
-    return ret;
-  }
-
-  for (uint8_t c = 0; c < 16; c++) {
-    // disable all channels
-    ret = enableChannel(c, false);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
-  ret = channelConfig(ch);
-  if (ret < 0) {
-
-    return ret;
-  }
-  cfg = (uint8_t) ret;
-  ret = setConfigOffset(cfg, 0x800000);
-
-  ret = enableChannel(ch, true);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = setMode(AD7124_OpMode_InternalGainCalibration);
-  ret = waitForConvReady(timeout);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = setMode(AD7124_OpMode_InternalOffsetCalibration);
-  ret = waitForConvReady(timeout);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return enableChannel (ch, false);
 }
 
 // Configure channel
@@ -853,7 +989,6 @@ int Ad7124::waitForConvReady(uint32_t timeout)
 {
   int ret;
   bool ready = false;
-
   int startMs = millis();
 
   while (1)

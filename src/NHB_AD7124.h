@@ -359,6 +359,8 @@ public:
                   AD7124_BurnoutCurrents burnout = AD7124_Burnout_Off, 
                   double exRefV = 2.50);
 
+    int getConfig();
+
     //Sets the filter type and output word rate for a setup
     int setFilter(AD7124_Filters filter, uint16_t fs, 
                   AD7124_PostFilters postfilter = AD7124_PostFilter_NoPost,
@@ -379,9 +381,11 @@ public:
     //Return the current gain setting
     uint8_t gain();
 
+    //runs internal calibration
+    int internalCalibration();
+
 private:
     uint8_t setupNum;
-
     Ad7124 *_driver; //pointer to outer class instance
     Ad7124_SetupVals setupValues;
 };
@@ -486,12 +490,6 @@ public:
 
     //Return the current operating mode
     AD7124_OperatingModes mode();
-
-
-    //runs internal calibration
-    int internalCalibration(uint8_t ch);
-
-
         
     // Waits until a new conversion result is available.
     // This would be private, but I made it public in case someone wants
@@ -518,7 +516,7 @@ private:
     int32_t readRegister(AD7124_regIDs id);
     int writeRegister(AD7124_regIDs id);
 
-    int waitForConvReady(uint32_t timeout);
+    int waitForConvReady(uint32_t timeout = AD7124_DEFAULT_TIMEOUT_MS);
     int waitForSpiReady(uint32_t timeout);
     int waitForPowerOn(uint32_t timeout);
 
