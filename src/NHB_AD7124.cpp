@@ -148,6 +148,20 @@ int Ad7124Setup::internalCalibration()
     int ret;
     uint8_t targetChannel = 0xFF;
     
+    // Save the current operating mode and power mode to restore later
+    AD7124_OperatingModes originalMode = _driver->mode();
+    AD7124_PowerModes originalPowerMode = _driver->powerMode();
+    Serial.printf("Saving original mode: %d, power mode: %d\n", originalMode, originalPowerMode);
+
+    //set to mid or low power for internal calibration
+    if (originalPowerMode != AD7124_LowPower) {
+        ret = _driver->setPowerMode(AD7124_LowPower);
+        if (ret < 0) {
+            Serial.printf("ERROR: Failed to set low power mode: %d\n", ret);
+            return ret;
+        }
+    }
+    
     // Find any channel that uses this setup
     for (uint8_t ch = 0; ch < 16; ch++) {
         if (_driver->channelSetup(ch) == setupNum) {
@@ -288,12 +302,19 @@ int Ad7124Setup::internalCalibration()
         Serial.println("Calibration coefficients updated successfully");
     }
 
-    // Return to standby mode
-    ret = _driver->setMode(AD7124_OpMode_Standby);
+    // Return to original operating mode and power mode
+    ret = _driver->setMode(originalMode);
     if (ret < 0) {
-        Serial.printf("ERROR: Failed to return to standby mode: %d\n", ret);
+        Serial.printf("ERROR: Failed to return to original mode %d: %d\n", originalMode, ret);
         return ret;
     }
+    
+    ret = _driver->setPowerMode(originalPowerMode);
+    if (ret < 0) {
+        Serial.printf("ERROR: Failed to return to original power mode %d: %d\n", originalPowerMode, ret);
+        return ret;
+    }
+    Serial.printf("Restored original operating mode: %d, power mode: %d\n", originalMode, originalPowerMode);
 
     // Restore original channel states
     for (uint8_t c = 0; c < 16; c++) {
@@ -628,6 +649,20 @@ int Ad7124::setMode(AD7124_OperatingModes mode)
 // Returns current operating mode
 AD7124_OperatingModes Ad7124::mode(){  
   return static_cast<AD7124_OperatingModes>((regs[Reg_Control].value >> 2) & 0xF);
+}
+
+// Returns current power mode
+AD7124_PowerModes Ad7124::powerMode(){
+  return static_cast<AD7124_PowerModes>((regs[Reg_Control].value >> 6) & 0x3);
+}
+
+// Set power mode independently  
+int Ad7124::setPowerMode(AD7124_PowerModes power_mode)
+{
+  regs[Reg_Control].value &= ~AD7124_ADC_CTRL_REG_POWER_MODE(0x03); // clear power mode bits
+  regs[Reg_Control].value |= AD7124_ADC_CTRL_REG_POWER_MODE(power_mode);
+
+  return writeRegister(Reg_Control);
 }
 
 // Configure channel

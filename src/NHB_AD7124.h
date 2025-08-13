@@ -465,6 +465,9 @@ public:
     //Control the mode of operation for ADC
     int setMode(AD7124_OperatingModes mode);
 
+    //Set power mode for ADC
+    int setPowerMode(AD7124_PowerModes power_mode);
+
     //Configure a channel
     int setChannel(uint8_t ch, uint8_t setup, AD7124_InputSel aiPos,
                    AD7124_InputSel aiNeg, bool enable = false);
@@ -490,6 +493,9 @@ public:
 
     //Return the current operating mode
     AD7124_OperatingModes mode();
+    
+    //Return the current power mode  
+    AD7124_PowerModes powerMode();
         
     // Waits until a new conversion result is available.
     // This would be private, but I made it public in case someone wants
